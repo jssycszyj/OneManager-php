@@ -102,7 +102,7 @@ function setConfig($arr, $disktag = '')
 {
     if (!($envs = getcache('REPLIT_CONFIG'))) {
         $envs = json_decode(curl('GET', getenv('REPLIT_DB_URL') . '/REPLIT_CONFIG')['body'], true);
-        //savecache('REPLIT_CONFIG', $envs);
+        savecache('REPLIT_CONFIG', $envs);
     }
     if ($disktag=='') $disktag = $_SERVER['disktag'];
     $disktags = explode("|", getConfig('disktag'));
@@ -202,13 +202,11 @@ function install()
             $title = 'Error';
             return message($html, $title, 201);
         }*/
-        $html .= '<button id="checkrewritebtn" onclick="checkrewrite();">'.getconstStr('MakesuerRewriteOn').'</button>
-<div id="formdiv" style="display: none">
+        $html .= '
     <form action="?install2" method="post" onsubmit="return notnull(this);">
         <input name="admin" type="password" placeholder="' . getconstStr('EnvironmentsDescription')['admin'] . '" size="' . strlen(getconstStr('EnvironmentsDescription')['admin']) . '"><br>
-        <input id="submitbtn" type="submit" value="'.getconstStr('Submit').'" disabled>
+        <input id="submitbtn" type="submit" value="'.getconstStr('Submit').'">
     </form>
-</div>
     <script>
         var nowtime= new Date();
         var timezone = 0-nowtime.getTimezoneOffset()/60;
@@ -223,29 +221,6 @@ function install()
                 return false;
             }
             return true;
-        }
-        function checkrewrite()
-        {
-            url=location.protocol + "//" + location.host;
-            //if (location.port!="") url += ":" + location.port;
-            url += location.pathname;
-            if (url.substr(-1)!="/") url += "/";
-            url += "app.json";
-            url += "?" + Date.now();
-            var xhr4 = new XMLHttpRequest();
-            xhr4.open("GET", url);
-            xhr4.setRequestHeader("x-requested-with","XMLHttpRequest");
-            xhr4.send(null);
-            xhr4.onload = function(e){
-                console.log(xhr4.responseText+","+xhr4.status);
-                if (xhr4.status==201) {
-                    document.getElementById("checkrewritebtn").style.display = "none";
-                    document.getElementById("submitbtn").disabled = false;
-                    document.getElementById("formdiv").style.display = "";
-                } else {
-                    alert("' . getconstStr('MakesuerRewriteOn') . '?\nfalse\n\nUrl: " + url + "\nExpect http code 201, but received " + xhr4.status);
-                }
-            }
         }
     </script>';
         $title = getconstStr('SetAdminPassword');
@@ -310,16 +285,18 @@ function setConfigResponse($response)
     //return json_decode($response, true);
 }
 
-function OnekeyUpate($auth = 'qkqpttgf', $project = 'OneManager-php', $branch = 'master')
+function OnekeyUpate($GitSource = 'Github', $auth = 'qkqpttgf', $project = 'OneManager-php', $branch = 'master')
 {
-    $slash = '/';
-    if (strpos(__DIR__, ':')) $slash = '\\';
     // __DIR__ is xxx/platform
-    $projectPath = splitlast(__DIR__, $slash)[0];
+    $projectPath = splitlast(__DIR__, '/')[0];
 
-    // 从github下载对应tar.gz，并解压
-    $url = 'https://github.com/' . $auth . '/' . $project . '/tarball/' . urlencode($branch) . '/';
-    $tarfile = $projectPath . $slash .'github.tar.gz';
+    if ($GitSource=='Github') {
+        // 从github下载对应tar.gz，并解压
+        $url = 'https://github.com/' . $auth . '/' . $project . '/tarball/' . urlencode($branch) . '/';
+    } elseif ($GitSource=='HITGitlab') {
+        $url = 'https://git.hit.edu.cn/' . $auth . '/' . $project . '/-/archive/' . urlencode($branch) . '/' . $project . '-' . urlencode($branch) . '.tar.gz';
+    } else return ['stat'=>500, 'body'=>'Git Source input Error!'];
+    $tarfile = $projectPath . '/github.tar.gz';
     $githubfile = file_get_contents($url);
     if (!$githubfile) return ['stat'=>500, 'body'=>'download error from github.'];
     file_put_contents($tarfile, $githubfile);
@@ -334,32 +311,25 @@ function OnekeyUpate($auth = 'qkqpttgf', $project = 'OneManager-php', $branch = 
     unlink($tarfile);
 
     $outPath = '';
-    $tmp = scandir($projectPath);
-    $name = $auth . '-' . $project;
-    foreach ($tmp as $f) {
-        if ( substr($f, 0, strlen($name)) == $name) {
-            $outPath = $projectPath . $slash . $f;
-            break;
-        }
-    }
+    $outPath = findIndexPath($projectPath);
     //error_log1($outPath);
     if ($outPath=='') return ['stat'=>500, 'body'=>'can\'t find folder after download from github.'];
 
-    return moveFolder($outPath, $projectPath, $slash);
+    return moveFolder($outPath, $projectPath);
 }
 
-function moveFolder($from, $to, $slash)
+function moveFolder($from, $to)
 {
-    if (substr($from, -1)==$slash) $from = substr($from, 0, -1);
-    if (substr($to, -1)==$slash) $to = substr($to, 0, -1);
+    if (substr($from, -1)=='/') $from = substr($from, 0, -1);
+    if (substr($to, -1)=='/') $to = substr($to, 0, -1);
     if (!file_exists($to)) mkdir($to, 0777);
     $handler=opendir($from);
     while($filename=readdir($handler)) {
         if($filename != '.' && $filename != '..'){
-            $fromfile = $from . $slash . $filename;
-            $tofile = $to . $slash . $filename;
+            $fromfile = $from . '/' . $filename;
+            $tofile = $to . '/' . $filename;
             if(is_dir($fromfile)){// 如果读取的某个对象是文件夹，则递归
-                $response = moveFolder($fromfile, $tofile, $slash);
+                $response = moveFolder($fromfile, $tofile);
                 if (api_error(setConfigResponse($response))) return $response;
             }else{
                 if (file_exists($tofile)) unlink($tofile);

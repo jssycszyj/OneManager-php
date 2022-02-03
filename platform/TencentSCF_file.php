@@ -59,6 +59,7 @@ function GetPathSetting($event, $context)
     $_SERVER['referhost'] = explode('/', $event['headers']['referer'])[2];
     $_SERVER['HTTP_TRANSLATE'] = $event['headers']['translate'];//'f'
     $_SERVER['HTTP_IF_MODIFIED_SINCE'] = $event['headers']['if-modified-since'];
+    $_SERVER['REQUEST_METHOD'] = $event['httpMethod'];
     $_SERVER['USER'] = 'qcloud';
     return $path;
 }
@@ -595,27 +596,25 @@ function setConfigResponse($response)
     return json_decode( $response, true )['Response'];
 }
 
-function OnekeyUpate($auth = 'qkqpttgf', $project = 'OneManager-php', $branch = 'master')
+function OnekeyUpate($GitSource = 'Github', $auth = 'qkqpttgf', $project = 'OneManager-php', $branch = 'master')
 {
     $source = '/tmp/code.zip';
     $outPath = '/tmp/';
 
-    // 从github下载对应tar.gz，并解压
-    $url = 'https://github.com/' . $auth . '/' . $project . '/tarball/' . urlencode($branch) . '/';
+    if ($GitSource=='Github') {
+        // 从github下载对应tar.gz，并解压
+        $url = 'https://github.com/' . $auth . '/' . $project . '/tarball/' . urlencode($branch) . '/';
+    } elseif ($GitSource=='HITGitlab') {
+        $url = 'https://git.hit.edu.cn/' . $auth . '/' . $project . '/-/archive/' . urlencode($branch) . '/' . $project . '-' . urlencode($branch) . '.tar.gz';
+    } else return json_encode(['Response'=>['Error'=>['code'=>'Git Source input Error!']]]);
     $tarfile = '/tmp/github.tar.gz';
     file_put_contents($tarfile, file_get_contents($url));
     $phar = new PharData($tarfile);
     $html = $phar->extractTo($outPath, null, true);//路径 要解压的文件 是否覆盖
 
-    // 获取包中目录名
-    $tmp = scandir('phar://'.$tarfile);
-    $name = $auth.'-'.$project;
-    foreach ($tmp as $f) {
-        if ( substr($f, 0, strlen($name)) == $name) {
-            $outPath .= $f;
-            break;
-        }
-    }
+    // 获取解压出的目录名
+    $outPath = findIndexPath($outPath);
+
     // 放入配置文件
     file_put_contents($outPath . '/.data/config.php', file_get_contents(__DIR__ . '/../.data/config.php'));
 
@@ -649,7 +648,7 @@ function addFileToZip($zip, $rootpath, $path = '')
             }
         }
     }
-    @closedir($path);
+    @closedir($handler);
 }
 
 function WaitFunction() {
